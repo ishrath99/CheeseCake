@@ -1,26 +1,23 @@
-"""Parallel agent dispatch via ThreadPoolExecutor."""
+"""Team orchestration: build Intelligence Team, run query, parse per-agent findings."""
 
 import asyncio
 import json
 import logging
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from agents.domain_agents import ALL_AGENTS, make_domain_agent
-from core.config import make_firecrawl_mcp, make_meta_ads_mcp
+from agents.domain_agents import AGENT_DOMAIN_MAP
+from agents.team import build_intelligence_team
 
 logger = logging.getLogger(__name__)
 
-
-def _extract_content(response) -> str:
-    """Pull the text content string out of an Agno RunResponse."""
-    if hasattr(response, "content") and isinstance(response.content, str):
-        return response.content
-    return str(response)
+# Ordered list of all possible agent names for skipped-agent computation
+_ALL_AGENT_NAMES: list[str] = list(AGENT_DOMAIN_MAP.keys())
 
 
-def _parse_findings(content: str) -> list[dict]:
-    """Extract and parse the JSON array from the agent's response text."""
+def _parse_findings(content) -> list[dict]:
+    """Extract a JSON array of findings from an agent's response content."""
+    if not isinstance(content, str):
+        content = json.dumps(content) if content else ""
     match = re.search(r"\[.*\]", content, re.DOTALL)
     if not match:
         return []
@@ -30,61 +27,46 @@ def _parse_findings(content: str) -> list[dict]:
         return []
 
 
-async def _run_agent_async(config: dict, query: str, session_id: str) -> dict:
-    """Async core: opens MCP tool contexts, builds agent, runs query."""
-    if config.get("use_meta_ads"):
-        async with make_firecrawl_mcp() as firecrawl, make_meta_ads_mcp() as meta_ads:
-            tools: list = [firecrawl, meta_ads]
-            # Phase 2: inject search_reddit here when use_reddit=True
-            agent = make_domain_agent(config, tools)
-            response = await agent.arun(query, session_id=session_id)
-    else:
-        async with make_firecrawl_mcp() as firecrawl:
-            tools = [firecrawl]
-            # Phase 2: inject search_reddit here when use_reddit=True
-            agent = make_domain_agent(config, tools)
-            response = await agent.arun(query, session_id=session_id)
+async def _arun_team(query: str, session_id: str) -> list[dict]:
+    """Build and run the Intelligence Team; return per-agent result dicts."""
+    team = build_intelligence_team()
+    team_output = await team.arun(query, session_id=session_id)
 
-    content = _extract_content(response)
-    findings = _parse_findings(content)
-    return {
-        "agent": config["name"],
-        "domain": config["domain"],
-        "findings": findings,
-        "error": None,
-    }
-
-
-def run_agent(config: dict, query: str, session_id: str) -> dict:
-    """Run a single domain agent in its own event loop (safe for threads).
-
-    All exceptions are caught and surfaced in the returned error field.
-    """
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(_run_agent_async(config, query, session_id))
-        finally:
-            loop.close()
-    except Exception as e:
-        logger.error("Agent %s failed: %s", config["name"], e)
-        return {
-            "agent": config["name"],
-            "domain": config["domain"],
-            "findings": [],
-            "error": str(e),
-        }
-
-
-def run_all_agents(query: str, session_id: str) -> list[dict]:
-    """Dispatch all 6 domain agents in parallel and collect results."""
     results: list[dict] = []
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = {
-            executor.submit(run_agent, config, query, session_id): config
-            for config in ALL_AGENTS
-        }
-        for future in as_completed(futures):
-            results.append(future.result())
+    for member_resp in team_output.member_responses or []:
+        agent_name = getattr(member_resp, "agent_name", None) or "Unknown"
+        content = member_resp.content
+        if not isinstance(content, str):
+            content = str(content) if content else ""
+        findings = _parse_findings(content)
+        results.append(
+            {
+                "agent": agent_name,
+                "domain": AGENT_DOMAIN_MAP.get(agent_name, agent_name),
+                "findings": findings,
+                "error": None,
+            }
+        )
     return results
+
+
+def run_team(query: str, session_id: str) -> tuple[list[dict], list[str], list[str]]:
+    """Run the Intelligence Team for a query.
+
+    Returns (agent_results, used_agent_names, skipped_agent_names).
+    agent_results follows the same schema as before: list of dicts with
+    keys agent, domain, findings, error.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        results = loop.run_until_complete(_arun_team(query, session_id))
+    except Exception as e:
+        logger.error("IntelligenceTeam run failed: %s", e)
+        results = []
+    finally:
+        loop.close()
+
+    used_names = [r["agent"] for r in results]
+    skipped_names = [n for n in _ALL_AGENT_NAMES if n not in used_names]
+    return results, used_names, skipped_names

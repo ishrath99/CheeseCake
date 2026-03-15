@@ -13,19 +13,43 @@ _DOMAIN_EMOJI: dict[str, str] = {
 }
 
 
-def render_agent_status(agent_results: list[dict]) -> None:
-    """Render a row of metric cards — one per domain agent."""
-    cols = st.columns(len(agent_results))
-    for col, result in zip(cols, agent_results):
+def render_agent_status(
+    agent_results: list[dict],
+    skipped_names: list[str] | None = None,
+) -> None:
+    """Render metric cards for all agents.
+
+    Used agents show signal count; skipped agents (not selected by the
+    team coordinator for this query) are shown dimmed with a dash.
+    """
+    from agents.domain_agents import AGENT_DOMAIN_MAP
+
+    skipped = skipped_names or []
+    skipped_cards = [
+        {
+            "agent": n,
+            "domain": AGENT_DOMAIN_MAP.get(n, n),
+            "findings": [],
+            "skipped": True,
+        }
+        for n in skipped
+    ]
+    all_cards = list(agent_results) + skipped_cards
+    if not all_cards:
+        return
+
+    cols = st.columns(len(all_cards))
+    for col, result in zip(cols, all_cards):
         domain = result.get("domain", result.get("agent", "Agent"))
         emoji = _DOMAIN_EMOJI.get(domain, "🔍")
-        signal_count = len(result.get("findings", []))
-        error = result.get("error")
         label = f"{emoji} {domain}"
-        if error:
+        if result.get("skipped"):
+            col.metric(label, "—", help="Not selected for this query")
+        elif result.get("error"):
             col.metric(label, "Error", delta="✗", delta_color="inverse")
         else:
-            col.metric(label, f"{signal_count} signals")
+            signal_count = len(result.get("findings", []))
+            col.metric(label, f"{signal_count} signals", delta="✓", delta_color="normal")
 
 
 def _render_signals_chart(findings: list[dict]) -> None:

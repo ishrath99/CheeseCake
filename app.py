@@ -10,7 +10,7 @@ load_dotenv()
 
 from core.config import validate_env  # noqa: E402
 from storage.postgres import delete_session, ensure_tables, list_sessions, load_artifact, save_artifact
-from agents.orchestrator import run_all_agents
+from agents.orchestrator import run_team
 from agents.synthesis import chat, synthesize
 from renderer.artifacts import render_agent_status, render_artifacts_panel
 from guardrails import check_input
@@ -149,9 +149,10 @@ if user_input:
 
     if is_first:
         with col_chat:
-            with st.status("Running intelligence agents…", expanded=True) as status:
-                agent_results = run_all_agents(user_input, sid)
-                render_agent_status(agent_results)
+            with st.status("Intelligence team selecting agents…", expanded=True) as status:
+                agent_results, used_agents, skipped_agents = run_team(user_input, sid)
+                st.caption(f"**Agents used:** {', '.join(used_agents) or 'none'}")
+                render_agent_status(agent_results, skipped_names=skipped_agents)
                 status.update(label="Synthesising…", state="running")
                 report = synthesize(user_input, agent_results, sid)
                 status.update(label="Done ✓", state="complete")
