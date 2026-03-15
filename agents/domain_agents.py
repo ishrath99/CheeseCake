@@ -9,7 +9,7 @@ from storage.postgres import get_agent_db
 
 # Prefer search (returns snippets) over scrape (returns full pages).
 # Hard cap: 3 tool calls per agent run to limit token consumption.
-_J = 'JSON array of 2-3 objects: [{"fact":"...","interpretation":"...","confidence":"high|medium|low","source_url":"..."}]'
+_J = 'JSON array of 2-3 objects: [{"fact":"...","interpretation":"...","source_url":"<exact URL>"}]. source_url is required — never omit it.'
 _SEARCH_HINT = "Use search tools only, not scrape. Maximum 3 searches."
 
 AGENT_CONFIGS: list[dict] = [
