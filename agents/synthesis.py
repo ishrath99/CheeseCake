@@ -9,6 +9,7 @@ from agno.agent import Agent
 from agno.memory import MemoryManager
 from agno.models.google import Gemini
 
+from core.config import GEMINI_MODEL_ID
 from core.models import SynthesisOutput
 from storage.postgres import get_synthesis_db
 
@@ -32,9 +33,9 @@ _db = get_synthesis_db("sessions_synthesis", "memories_synthesis")
 synthesis_agent = Agent(
     id=_AGENT_ID,
     name="SynthesisAgent",
-    model=Gemini(id="gemini-3-flash-preview"),
+    model=Gemini(id=GEMINI_MODEL_ID),
     db=_db,
-    memory_manager=MemoryManager(model=Gemini(id="gemini-3-flash-preview"), db=_db),
+    memory_manager=MemoryManager(model=Gemini(id=GEMINI_MODEL_ID), db=_db),
     enable_agentic_memory=True,
     add_history_to_context=True,
     num_history_runs=10,
@@ -47,7 +48,7 @@ synthesis_agent = Agent(
 _chat_agent = Agent(
     id=_AGENT_ID,
     name="SynthesisAgent",
-    model=Gemini(id="gemini-3-flash-preview"),
+    model=Gemini(id=GEMINI_MODEL_ID),
     db=_db,
     add_history_to_context=True,
     num_history_runs=10,

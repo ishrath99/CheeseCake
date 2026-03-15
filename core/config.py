@@ -24,6 +24,7 @@ _PHASE2_KEYS = [
 ]
 
 POSTGRES_URL: str = os.getenv("POSTGRES_URL", "postgresql+psycopg://ai:ai@localhost:5532/ai")
+GEMINI_MODEL_ID: str = os.getenv("GEMINI_MODEL_ID", "gemini-3-flash-preview")
 
 
 def validate_env() -> None:

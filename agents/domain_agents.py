@@ -5,6 +5,7 @@ import os
 from agno.agent import Agent
 from agno.models.google import Gemini
 
+from core.config import GEMINI_MODEL_ID
 from storage.postgres import get_agent_db
 
 # Prefer search (returns snippets) over scrape (returns full pages).
@@ -79,7 +80,7 @@ def make_domain_agent(config: dict, tools: list) -> Agent:
     """Instantiate a domain Agent with the given tools and session storage."""
     return Agent(
         name=config["name"],
-        model=Gemini(id="gemini-3-flash-preview"),
+        model=Gemini(id=GEMINI_MODEL_ID),
         tools=tools,
         tool_call_limit=3,
         compress_tool_results=True,

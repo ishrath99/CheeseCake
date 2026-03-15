@@ -43,6 +43,37 @@ def _render_signals_chart(findings: list[dict]) -> None:
     st.bar_chart(counts, x_label="Domain", y_label="Signals")
 
 
+@st.dialog("Intelligence Report", width="large")
+def _report_dialog(report: dict, query: str) -> None:
+    """Full-screen modal for a single artifact."""
+    st.caption(f"Query: {query}")
+    render_report(report)
+
+
+def render_artifacts_panel(messages: list[dict]) -> None:
+    """Render all session report artifacts as compact cards with maximize support."""
+    reports = [(i, m) for i, m in enumerate(messages) if m.get("type") == "report"]
+    if not reports:
+        st.caption("Intelligence reports will appear here after running a query.")
+        return
+    for msg_i, msg in reports:
+        report = msg["content"]
+        query = next(
+            (m["content"] for m in reversed(messages[:msg_i]) if m["role"] == "user"),
+            "Report",
+        )
+        summary = report.get("summary", "")
+        n_findings = len(report.get("top_findings", []))
+        n_actions = len(report.get("recommended_actions", []))
+        with st.container(border=True):
+            st.markdown(f"**{query[:60]}{'…' if len(query) > 60 else ''}**")
+            st.caption(f"{n_findings} findings · {n_actions} actions")
+            if summary:
+                st.write(summary[:200] + ("…" if len(summary) > 200 else ""))
+            if st.button("⤢ Expand", key=f"expand_{msg_i}", use_container_width=True):
+                _report_dialog(report, query)
+
+
 def render_report(report: dict) -> None:
     """Render the full intelligence report as inline Streamlit artifacts."""
     summary = report.get("summary", "")
