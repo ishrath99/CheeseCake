@@ -120,7 +120,8 @@ with col_artifacts:
 user_input = st.chat_input("Ask anything…") or st.session_state.pop("_quick", None)
 
 if user_input:
-    is_first = len(messages) == 0
+    # Route is determined per-query by the guardrail (guard.needs_team),
+    # not by session state. This is computed AFTER the guardrail runs below.
 
     # Show user message immediately
     with col_chat:
@@ -132,7 +133,7 @@ if user_input:
     with col_chat:
         with st.chat_message("assistant"):
             with st.spinner(""):
-                guard = check_input(user_input)
+                guard = check_input(user_input, history=messages)
             if not guard.passed:
                 reply_text = guard.reply or f"I can't help with that — {guard.reason}"
                 st.markdown(reply_text)
@@ -147,7 +148,7 @@ if user_input:
     # Use cleaned query (PII redacted) for all downstream processing
     user_input = guard.cleaned_query
 
-    if is_first:
+    if guard.needs_team:
         with col_chat:
             with st.status("Intelligence team selecting agents…", expanded=True) as status:
                 agent_results, used_agents, skipped_agents = run_team(user_input, sid)
