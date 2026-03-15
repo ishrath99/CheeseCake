@@ -127,10 +127,12 @@ def render_report(report: dict) -> None:
             st.markdown(f"#### {emoji} {domain}")
             for finding in domain_findings:
                 fact = finding.get("fact", "")
+                conf = finding.get("confidence_score")
+                conf_str = f" (Confidence: {conf}/10)" if conf is not None else ""
                 source_url = finding.get("source_url", "").strip()
                 source_label = finding.get("source_label") or source_url
 
-                with st.expander(fact[:120] + ("…" if len(fact) > 120 else "")):
+                with st.expander(fact[:120] + ("…" if len(fact) > 120 else "") + conf_str):
                     st.write(finding.get("interpretation", ""))
                     if source_url:
                         st.markdown(f"🔗 **Source:** [{source_label}]({source_url})")

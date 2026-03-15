@@ -13,6 +13,7 @@ class Finding(BaseModel):
     interpretation: str
     source_url: Optional[str] = None
     source_label: Optional[str] = None
+    confidence_score: Optional[int] = None
 
 
 class IntelReport(BaseModel):

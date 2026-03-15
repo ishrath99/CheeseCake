@@ -20,11 +20,11 @@ _SYSTEM_PROMPT = (
     "For full intelligence requests (those that include a Findings JSON block): "
     "deduplicate and rank the top 5 findings, write a 3-sentence executive summary, "
     "and produce 3 specific actionable recommendations. "
-    "Each finding must preserve the exact domain, fact, interpretation, and source_url "
+    "Each finding must preserve the exact domain, fact, interpretation, source_url, and confidence_score "
     "copied verbatim — never invent or modify URLs. "
     "Respond ONLY with valid JSON, no prose, no markdown fences:\n"
     '{"summary": "...", '
-    '"top_findings": [{"domain": "...", "fact": "...", "interpretation": "...", "source_url": "..."}], '
+    '"top_findings": [{"domain": "...", "fact": "...", "interpretation": "...", "source_url": "...", "confidence_score": 8}], '
     '"recommended_actions": ["...", "...", "..."]}\n'
     "For follow-up questions (no Findings block), answer concisely in plain text."
 )
