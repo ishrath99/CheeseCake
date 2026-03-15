@@ -6,6 +6,16 @@ from storage.postgres import (
     get_agent_db,
     get_synthesis_db,
     list_sessions,
+    load_artifact,
+    save_artifact,
 )
 
-__all__ = ["get_agent_db", "get_synthesis_db", "ensure_tables", "list_sessions", "delete_session"]
+__all__ = [
+    "get_agent_db",
+    "get_synthesis_db",
+    "ensure_tables",
+    "list_sessions",
+    "delete_session",
+    "load_artifact",
+    "save_artifact",
+]

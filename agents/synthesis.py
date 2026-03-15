@@ -1,4 +1,4 @@
-"""Synthesis agent: deduplicates findings and produces structured reports."""
+"""Synthesis agent: full intelligence runs and conversational follow-ups."""
 
 import asyncio
 import json
@@ -15,14 +15,20 @@ from storage.postgres import get_synthesis_db
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
-    "Strategic analyst. Deduplicate and rank the top 5 findings from the agent results. "
-    "Write a 3-sentence executive summary and 3 actionable recommendations. "
-    "Each finding needs: domain, fact, interpretation, confidence (high/medium/low), source_url."
+    "Strategic analyst. For full intelligence requests deduplicate and rank the top 5 "
+    "findings, write a 3-sentence executive summary, and produce 3 actionable "
+    "recommendations. Each finding needs: domain, fact, interpretation, "
+    "confidence (high/medium/low), source_url. For follow-up questions answer "
+    "concisely using the existing findings already in context."
 )
 
+# Shared agent id so both agents below read/write the same Agno session record.
+_AGENT_ID = "cheesecake-synthesis"
 _db = get_synthesis_db("sessions_synthesis", "memories_synthesis")
 
+# Used for full intelligence runs — enforces SynthesisOutput schema.
 synthesis_agent = Agent(
+    id=_AGENT_ID,
     name="SynthesisAgent",
     model=Gemini(id="gemini-3-flash-preview"),
     db=_db,
@@ -35,10 +41,30 @@ synthesis_agent = Agent(
     debug_mode=True,
 )
 
+# Used for conversational follow-ups — same session history, no structured schema.
+_chat_agent = Agent(
+    id=_AGENT_ID,
+    name="SynthesisAgent",
+    model=Gemini(id="gemini-3-flash-preview"),
+    db=_db,
+    add_history_to_context=True,
+    num_history_runs=10,
+    instructions=[_SYSTEM_PROMPT],
+    debug_mode=True,
+)
+
+
+def _run_async(coro):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
 
 def _build_prompt(query: str, raw_results: list[dict]) -> str:
-    """Assemble the synthesis prompt from the original query and agent findings."""
-    tagged: list[dict] = []
+    tagged = []
     for result in raw_results:
         domain = result.get("domain", "Unknown")
         for finding in result.get("findings", []):
@@ -47,43 +73,34 @@ def _build_prompt(query: str, raw_results: list[dict]) -> str:
 
 
 def _parse_response(response) -> dict:
-    """Extract a SynthesisOutput-compatible dict from an Agno RunOutput."""
     content = response.content
-
-    # Agno may return the parsed Pydantic model directly
     if isinstance(content, SynthesisOutput):
         return content.model_dump()
     if isinstance(content, dict):
         return content
-
-    # Fall back to parsing text content
     text = response.get_content_as_string()
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match:
-        data = json.loads(match.group())
-        return SynthesisOutput.model_validate(data).model_dump()
-
+        return SynthesisOutput.model_validate(json.loads(match.group())).model_dump()
     raise ValueError(f"Could not parse synthesis response: {text[:200]}")
 
 
 def synthesize(query: str, raw_results: list[dict], session_id: str) -> dict:
-    """Run the synthesis agent and return a SynthesisOutput-compatible dict."""
+    """Full intelligence run — returns a SynthesisOutput-compatible dict."""
     prompt = _build_prompt(query, raw_results)
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            response = loop.run_until_complete(
-                synthesis_agent.arun(prompt, session_id=session_id)
-            )
-        finally:
-            loop.close()
+        response = _run_async(synthesis_agent.arun(prompt, session_id=session_id))
         return _parse_response(response)
     except Exception as e:
         logger.error("Synthesis failed: %s", e)
+    return {"summary": "Synthesis unavailable.", "top_findings": [], "recommended_actions": []}
 
-    return {
-        "summary": "Synthesis unavailable — check logs for details.",
-        "top_findings": [],
-        "recommended_actions": [],
-    }
+
+def chat(message: str, session_id: str) -> str:
+    """Conversational follow-up — returns plain text using the session's existing context."""
+    try:
+        response = _run_async(_chat_agent.arun(message, session_id=session_id))
+        return response.get_content_as_string()
+    except Exception as e:
+        logger.error("Chat failed: %s", e)
+        return "Sorry, something went wrong. Please try again."
