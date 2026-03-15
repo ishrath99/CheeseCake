@@ -11,7 +11,7 @@ class Finding(BaseModel):
     domain: str
     fact: str
     interpretation: str
-    source_url: str
+    source_url: Optional[str] = None
     source_label: Optional[str] = None
 
 

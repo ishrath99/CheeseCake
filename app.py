@@ -122,20 +122,24 @@ user_input = st.chat_input("Ask anything…") or st.session_state.pop("_quick", 
 if user_input:
     is_first = len(messages) == 0
 
-    # Show user message immediately — before guardrail LLM call
+    # Show user message immediately
     with col_chat:
         with st.chat_message("user"):
             st.markdown(user_input)
 
-    # ── Guardrails ────────────────────────────────────────────────────────────
-    guard = check_input(user_input, messages)
+    # ── Guardrails — spinner appears before the LLM call ─────────────────────
+    reply_text: str | None = None
+    with col_chat:
+        with st.chat_message("assistant"):
+            with st.spinner(""):
+                guard = check_input(user_input)
+            if not guard.passed:
+                reply_text = guard.reply or f"I can't help with that — {guard.reason}"
+                st.markdown(reply_text)
+
     messages.append({"role": "user", "content": user_input, "type": "text"})
 
-    if not guard.passed:
-        reply_text = guard.reply or f"I can't help with that — {guard.reason}"
-        with col_chat:
-            with st.chat_message("assistant"):
-                st.markdown(reply_text)
+    if not guard.passed and reply_text:
         messages.append({"role": "assistant", "content": reply_text, "type": "text"})
         _save(sid)
         st.rerun()

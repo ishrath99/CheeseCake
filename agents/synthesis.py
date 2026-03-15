@@ -16,13 +16,17 @@ from storage.postgres import get_synthesis_db
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
-    "Strategic analyst. For full intelligence requests deduplicate and rank the top 5 "
-    "findings from the provided input, write a 3-sentence executive summary, and produce "
-    "3 actionable recommendations. Each finding must preserve the exact domain, fact, "
-    "interpretation, and source_url copied verbatim from the input — never generate, "
-    "modify, or invent URLs. If a finding has no source_url in the input, omit it from "
-    "top_findings. For follow-up questions answer concisely using the existing findings "
-    "already in context."
+    "You are a strategic analyst. "
+    "For full intelligence requests (those that include a Findings JSON block): "
+    "deduplicate and rank the top 5 findings, write a 3-sentence executive summary, "
+    "and produce 3 specific actionable recommendations. "
+    "Each finding must preserve the exact domain, fact, interpretation, and source_url "
+    "copied verbatim — never invent or modify URLs. "
+    "Respond ONLY with valid JSON, no prose, no markdown fences:\n"
+    '{"summary": "...", '
+    '"top_findings": [{"domain": "...", "fact": "...", "interpretation": "...", "source_url": "..."}], '
+    '"recommended_actions": ["...", "...", "..."]}\n'
+    "For follow-up questions (no Findings block), answer concisely in plain text."
 )
 
 # Shared agent id so both agents below read/write the same Agno session record.
@@ -77,15 +81,34 @@ def _build_prompt(query: str, raw_results: list[dict]) -> str:
 
 def _parse_response(response) -> dict:
     content = response.content
+
+    # Already the right type
     if isinstance(content, SynthesisOutput):
         return content.model_dump()
-    if isinstance(content, dict):
-        return content
-    text = response.get_content_as_string()
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        return SynthesisOutput.model_validate(json.loads(match.group())).model_dump()
-    raise ValueError(f"Could not parse synthesis response: {text[:200]}")
+
+    # Get a raw value to work with — prefer content, fall back to string
+    raw = content if content is not None else response.get_content_as_string()
+    logger.debug("Synthesis raw content type=%s value=%s", type(raw).__name__, str(raw)[:300])
+
+    # If it's a string, strip fences and extract JSON object
+    if isinstance(raw, str):
+        raw = re.sub(r"^```[a-z]*\n?|\n?```$", "", raw.strip(), flags=re.IGNORECASE)
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not match:
+            raise ValueError(f"No JSON object found in synthesis response: {raw[:200]}")
+        raw = json.loads(match.group())
+
+    # raw is now a dict — validate against the schema
+    if isinstance(raw, dict):
+        try:
+            return SynthesisOutput.model_validate(raw).model_dump()
+        except Exception as ve:
+            logger.warning("SynthesisOutput validation failed (%s) — using raw dict", ve)
+            # Return what we have if it has the minimum required keys
+            if "summary" in raw:
+                return raw
+
+    raise ValueError(f"Could not parse synthesis response: {str(raw)[:200]}")
 
 
 def synthesize(query: str, raw_results: list[dict], session_id: str) -> dict:

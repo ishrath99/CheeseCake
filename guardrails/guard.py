@@ -46,6 +46,14 @@ A short follow-up ("tell me more", "why?", "and?") is PASS when the session hist
 Respond with JSON only — no markdown, no extra text:
 {"pass": true/false, "reason": "<one sentence>", "violation": null | "off_topic" | "harmful" | "prompt_injection", "reply": null | "<response text>"}"""
 
+# Stateless agent — no storage, no session, no memory overhead
+_agent = Agent(
+    model=Gemini(id=GEMINI_MODEL_ID),
+    instructions=_SYSTEM,
+    markdown=False,
+    debug_mode=True,
+)
+
 
 class GuardrailResult(BaseModel):
     """Result returned by check_input()."""
@@ -68,47 +76,13 @@ def _redact(text: str) -> tuple[str, list[str]]:
     return text, found
 
 
-def _history_snippet(messages: list[dict]) -> str:
-    """Compact session context for the guardrail LLM.
-
-    Includes the executive summary of any prior intelligence report (so the
-    guardrail understands the session topic) plus the last 6 conversational turns.
-    """
-    lines: list[str] = []
-
-    # Include the most recent report's executive summary for topic context
-    for m in reversed(messages):
-        if m.get("type") == "report":
-            summary = m["content"].get("summary", "") if isinstance(m.get("content"), dict) else ""
-            if summary:
-                lines.append(f"[Prior intelligence report summary]: {summary[:300]}")
-            break
-
-    # Last 6 non-report conversational turns
-    recent = [m for m in messages[-8:] if m.get("type") != "report"][-6:]
-    for m in recent:
-        lines.append(f"{m['role'].capitalize()}: {str(m['content'])[:150]}")
-
-    return "\n".join(lines) if lines else "No prior conversation."
-
-
 # ── Main guardrail ────────────────────────────────────────────────────────────
-def check_input(query: str, session_messages: list[dict]) -> GuardrailResult:
-    """
-    Run PII + relevance guardrails on an incoming user query.
-
-    Args:
-        query: Raw user message.
-        session_messages: Current session message list for follow-up context.
-
-    Returns:
-        GuardrailResult with passed=True and cleaned_query if allowed.
-    """
+def check_input(query: str) -> GuardrailResult:
+    """Run PII redaction then a stateless agno LLM relevance/safety check."""
     # 1. PII redaction
     cleaned, pii_types = _redact(query)
     if pii_types:
         log.warning("PII detected and redacted: %s", pii_types)
-        # If nothing substantive remains after redaction, block it
         residual = re.sub(r"\[[A-Z_ ]+ REDACTED\]", "", cleaned).strip()
         if not residual:
             return GuardrailResult(
@@ -118,22 +92,13 @@ def check_input(query: str, session_messages: list[dict]) -> GuardrailResult:
                 violation="pii",
             )
 
-    # 2. Relevance + safety check via Gemini flash
-    history = _history_snippet(session_messages)
-    user_prompt = f"Session history:\n{history}\n\nIncoming message: {cleaned}"
-
+    # 2. Relevance + safety check
     if not os.getenv("GOOGLE_API_KEY"):
         log.warning("GOOGLE_API_KEY not set — skipping LLM relevance check")
         return GuardrailResult(passed=True, reason="OK (no key)", cleaned_query=cleaned)
 
     try:
-        agent = Agent(
-            model=Gemini(id=GEMINI_MODEL_ID),
-            instructions=_SYSTEM,
-            debug_mode=True,
-            markdown=False,
-        )
-        resp = agent.run(user_prompt)
+        resp = _agent.run(cleaned)
         raw = (resp.content or "").strip()
         raw = re.sub(r"^```[a-z]*\n?|\n?```$", "", raw, flags=re.IGNORECASE).strip()
         data = json.loads(raw)
