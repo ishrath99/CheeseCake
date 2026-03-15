@@ -16,10 +16,12 @@ logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
     "Strategic analyst. For full intelligence requests deduplicate and rank the top 5 "
-    "findings, write a 3-sentence executive summary, and produce 3 actionable "
-    "recommendations. Each finding needs: domain, fact, interpretation, "
-    "source_url (required — always include). For follow-up questions answer "
-    "concisely using the existing findings already in context."
+    "findings from the provided input, write a 3-sentence executive summary, and produce "
+    "3 actionable recommendations. Each finding must preserve the exact domain, fact, "
+    "interpretation, and source_url copied verbatim from the input — never generate, "
+    "modify, or invent URLs. If a finding has no source_url in the input, omit it from "
+    "top_findings. For follow-up questions answer concisely using the existing findings "
+    "already in context."
 )
 
 # Shared agent id so both agents below read/write the same Agno session record.
