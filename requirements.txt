@@ -1,0 +1,9 @@
+agno[google,firecrawl,psycopg,mcp]
+streamlit
+python-dotenv
+pydantic
+requests
+praw
+psycopg[binary]
+mcp
+sqlalchemy
