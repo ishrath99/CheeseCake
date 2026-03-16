@@ -7,6 +7,7 @@ from agno.team import Team, TeamMode  # type: ignore[attr-defined]
 from agents.domain_agents import ALL_AGENTS
 from core.config import GEMINI_MODEL_ID, make_firecrawl_mcp, make_meta_ads_mcp
 from storage.postgres import get_agent_db
+from tools.playwright_scraper import scrape_with_playwright
 
 _COORDINATOR_INSTRUCTIONS = [
     "You are the coordinator of a growth intelligence research team.",
@@ -25,7 +26,7 @@ def _make_member_agents() -> list:  # list[Agent | Team] at runtime
     """Instantiate one Agent per domain config, each with its own MCPTools instance."""
     members = []
     for config in ALL_AGENTS:
-        tools = [make_firecrawl_mcp()]
+        tools = [make_firecrawl_mcp(), scrape_with_playwright]
         if config.get("use_meta_ads"):
             tools.append(make_meta_ads_mcp())
         agent = Agent(

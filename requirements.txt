@@ -7,3 +7,4 @@ praw
 psycopg[binary]
 mcp
 sqlalchemy
+playwright

@@ -11,14 +11,14 @@ from storage.postgres import get_agent_db
 # Prefer search (returns snippets) over scrape (returns full pages).
 # Hard cap: 3 tool calls per agent run to limit token consumption.
 _J = 'JSON array of 2-3 objects: [{"fact":"...","interpretation":"...","source_url":"<exact URL>","confidence_score":<1-10>}]. source_url is required — never omit it.'
-_SEARCH_HINT = "Use search tools only, not scrape. Maximum 3 searches."
+_SEARCH_HINT = "Use search tools, or Playwright scraper as fallback if Firecrawl/Meta Ads fail or require JS. Maximum 3 tools."
 
 AGENT_CONFIGS: list[dict] = [
     {
         "name": "MarketTrendsAgent",
         "domain": "Market & Trends",
         "slug": "market",
-        "use_meta_ads": False,
+        "use_meta_ads": True,
         "use_reddit": False,
         "system_prompt": f"Market intelligence: find market size, funding, job trends. {_SEARCH_HINT} Return {_J}",
     },
